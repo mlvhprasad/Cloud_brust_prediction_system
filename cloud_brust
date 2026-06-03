@@ -1,0 +1,286 @@
+# ==========================================================
+# CLOUDBURST PREDICTION SYSTEM
+# Tech Stack: Python, Pandas, Scikit-learn, Matplotlib, Seaborn
+# ==========================================================
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.impute import SimpleImputer
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    confusion_matrix,
+    classification_report
+)
+
+# ==========================================================
+# 1. LOAD DATASET
+# ==========================================================
+
+df = pd.read_csv("rainfall.csv")
+
+print("\nDataset Shape:")
+print(df.shape)
+
+print("\nFirst 5 Rows:")
+print(df.head())
+
+print("\nDataset Info:")
+print(df.info())
+
+# ==========================================================
+# 2. DATA CLEANING
+# ==========================================================
+
+print("\nMissing Values Before Cleaning:")
+print(df.isnull().sum())
+
+# Remove duplicates
+df.drop_duplicates(inplace=True)
+
+# Fill missing numeric values
+numeric_cols = df.select_dtypes(include=np.number).columns
+
+imputer = SimpleImputer(strategy="median")
+df[numeric_cols] = imputer.fit_transform(df[numeric_cols])
+
+print("\nMissing Values After Cleaning:")
+print(df.isnull().sum())
+
+# ==========================================================
+# 3. EXPLORATORY DATA ANALYSIS
+# ==========================================================
+
+print("\nStatistical Summary:")
+print(df.describe())
+
+# Rainfall Distribution
+plt.figure(figsize=(8,5))
+sns.histplot(df['Rainfall'], bins=30)
+plt.title("Rainfall Distribution")
+plt.show()
+
+# Correlation Heatmap
+plt.figure(figsize=(10,8))
+sns.heatmap(
+    df.corr(numeric_only=True),
+    annot=True,
+    cmap="coolwarm"
+)
+plt.title("Correlation Matrix")
+plt.show()
+
+# ==========================================================
+# 4. CREATE CLOUDBURST LABEL
+# Cloudburst => Rainfall > 100 mm
+# ==========================================================
+
+df["Cloudburst"] = np.where(df["Rainfall"] > 100, 1, 0)
+
+print("\nCloudburst Class Distribution:")
+print(df["Cloudburst"].value_counts())
+
+# ==========================================================
+# 5. FEATURE SELECTION
+# ==========================================================
+
+available_features = []
+
+for col in [
+    "Temperature",
+    "Humidity",
+    "Pressure",
+    "WindSpeed",
+    "Rainfall"
+]:
+    if col in df.columns:
+        available_features.append(col)
+
+X = df[available_features]
+y = df["Cloudburst"]
+
+print("\nSelected Features:")
+print(available_features)
+
+# ==========================================================
+# 6. TRAIN TEST SPLIT
+# ==========================================================
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
+)
+
+# ==========================================================
+# 7. FEATURE SCALING
+# ==========================================================
+
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+# ==========================================================
+# 8. LOGISTIC REGRESSION
+# ==========================================================
+
+print("\n==============================")
+print("LOGISTIC REGRESSION")
+print("==============================")
+
+lr = LogisticRegression(max_iter=1000)
+
+lr.fit(X_train_scaled, y_train)
+
+lr_pred = lr.predict(X_test_scaled)
+
+print("Accuracy :", accuracy_score(y_test, lr_pred))
+print("Precision:", precision_score(y_test, lr_pred))
+print("Recall   :", recall_score(y_test, lr_pred))
+print("F1 Score :", f1_score(y_test, lr_pred))
+
+print("\nClassification Report:")
+print(classification_report(y_test, lr_pred))
+
+# ==========================================================
+# 9. RANDOM FOREST
+# ==========================================================
+
+print("\n==============================")
+print("RANDOM FOREST")
+print("==============================")
+
+rf = RandomForestClassifier(
+    n_estimators=100,
+    random_state=42
+)
+
+rf.fit(X_train, y_train)
+
+rf_pred = rf.predict(X_test)
+
+print("Accuracy :", accuracy_score(y_test, rf_pred))
+print("Precision:", precision_score(y_test, rf_pred))
+print("Recall   :", recall_score(y_test, rf_pred))
+print("F1 Score :", f1_score(y_test, rf_pred))
+
+print("\nClassification Report:")
+print(classification_report(y_test, rf_pred))
+
+# ==========================================================
+# 10. HYPERPARAMETER TUNING
+# ==========================================================
+
+print("\n==============================")
+print("GRID SEARCH OPTIMIZATION")
+print("==============================")
+
+param_grid = {
+    "n_estimators": [100, 200],
+    "max_depth": [5, 10, None],
+    "min_samples_split": [2, 5]
+}
+
+grid = GridSearchCV(
+    RandomForestClassifier(random_state=42),
+    param_grid,
+    cv=3,
+    scoring="f1",
+    n_jobs=-1
+)
+
+grid.fit(X_train, y_train)
+
+best_rf = grid.best_estimator_
+
+print("Best Parameters:")
+print(grid.best_params_)
+
+# ==========================================================
+# 11. EVALUATE OPTIMIZED MODEL
+# ==========================================================
+
+best_pred = best_rf.predict(X_test)
+
+print("\n==============================")
+print("OPTIMIZED RANDOM FOREST")
+print("==============================")
+
+print("Accuracy :", accuracy_score(y_test, best_pred))
+print("Precision:", precision_score(y_test, best_pred))
+print("Recall   :", recall_score(y_test, best_pred))
+print("F1 Score :", f1_score(y_test, best_pred))
+
+print("\nClassification Report:")
+print(classification_report(y_test, best_pred))
+
+# ==========================================================
+# 12. CONFUSION MATRIX
+# ==========================================================
+
+cm = confusion_matrix(y_test, best_pred)
+
+plt.figure(figsize=(6,5))
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt="d",
+    cmap="Blues"
+)
+
+plt.title("Confusion Matrix")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.show()
+
+# ==========================================================
+# 13. FEATURE IMPORTANCE
+# ==========================================================
+
+importance = pd.DataFrame({
+    "Feature": available_features,
+    "Importance": best_rf.feature_importances_
+}).sort_values(
+    by="Importance",
+    ascending=False
+)
+
+print("\nFeature Importance:")
+print(importance)
+
+plt.figure(figsize=(8,5))
+sns.barplot(
+    x="Importance",
+    y="Feature",
+    data=importance
+)
+
+plt.title("Feature Importance")
+plt.show()
+
+# ==========================================================
+# 14. SAVE MODEL
+# ==========================================================
+
+import pickle
+
+pickle.dump(best_rf, open("cloudburst_model.pkl", "wb"))
+
+print("\nModel Saved Successfully!")
+print("File Name: cloudburst_model.pkl")
+
+# ==========================================================
+# END OF PROJECT
+# ==========================================================
